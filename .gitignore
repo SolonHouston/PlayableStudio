@@ -1,0 +1,10 @@
+tests/chrome-profile/
+build/single-html-qa/
+tests/_tmp_*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
