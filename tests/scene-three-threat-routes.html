@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><link rel="stylesheet" href="../src/game.css"></head>
+<body>
+  <main id="shell">
+    <canvas id="game" width="280" height="462"></canvas>
+    <div class="hud"><div class="topline"><span class="badge">轨迹测试</span><span>场景三</span></div>
+      <div id="objective" class="objective"></div>
+      <div class="counts"><span id="blade-count"></span><span id="phase-hint"></span></div></div>
+    <div id="toast" class="toast"></div>
+    <div id="floating-stick" class="floating-stick"><div id="floating-knob" class="floating-knob"></div></div>
+    <div id="result" class="result" hidden><div class="result-card"><h1 id="result-title"></h1>
+      <p id="result-detail"></p><button id="retry">重试</button></div></div>
+  </main>
+  <script src="../src/scene3-play.js"></script>
+  <script>
+    (async () => {
+      const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+      const close = (a, b, tolerance = .8) => Math.abs(a - b) <= tolerance;
+      const onLine = (start, point, target) => {
+        const cross = (point.x - start.x) * (target.y - start.y) -
+          (point.y - start.y) * (target.x - start.x);
+        return Math.abs(cross) < 1;
+      };
+      try {
+        for (let index = 0; index < 80; index++) {
+          if (window.__SCENE3_PLAY__ && document.getElementById('game').dataset.renderStatus === 'ready') break;
+          await wait(50);
+        }
+        const api = window.__SCENE3_PLAY__;
+        const initial = api.state();
+        if (initial.giant.blades !== 16 || initial.demon.blades !== 16)
+          throw new Error('巨人和魔人的红刃没有围满光轮');
+        if (initial.giant.active || initial.demon.active)
+          throw new Error('开局巨人或魔人直接生成在视野中');
+        const initialRight = initial.camera.x + 280;
+        if (initial.rainbow.x - 21 <= initialRight)
+          throw new Error('彩刃没有刚好位于初始视野斜上方之外');
+        if (initial.rainbow.y !== 48)
+          throw new Error('彩刃资源气泡没有继续向上移动30世界单位');
+        const refill = api.debug.threatRingProbe();
+        if (refill.before !== 16 || refill.afterLoss !== 15 || refill.afterRestore !== 16)
+          throw new Error(`巨人红刃没有自动补满：${JSON.stringify(refill)}`);
+        api.debug.setPlayerPosition(560, 262);
+        api.debug.advance(.001);
+        const entered = api.state();
+        const outside = subject => subject.x + 77.5 < entered.camera.x - 30 ||
+          subject.x - 77.5 > entered.camera.x + 310 ||
+          subject.y + 77.5 < entered.camera.y - 30 ||
+          subject.y - 77.5 > entered.camera.y + 492;
+        if (!entered.giant.active || !entered.demon.active ||
+            entered.giant.entryState !== 'entering' || entered.demon.entryState !== 'entering' ||
+            !outside(entered.giant) || !outside(entered.demon))
+          throw new Error('彩刃进入视野时，巨人和魔人没有从完整光轮位于视野外的位置进入');
+        if (entered.goblinsAlive !== 10)
+          throw new Error('巨人和魔人的释放仍错误依赖哥布林全灭');
+        if (Math.abs(entered.giant.x - entered.rainbow.x) > 2 ||
+            entered.giant.y >= entered.rainbow.y)
+          throw new Error('巨人没有从彩刃正上方开始逼近');
+        api.debug.advance(.26);
+        const moving = api.state();
+        if (!onLine(initial.giant, moving.giant, moving.giant.target) ||
+            !onLine(initial.demon, moving.demon, moving.demon.target))
+          throw new Error('巨人或魔人偏离固定斜向直线');
+        api.debug.advance(2.2);
+        const paced = api.state();
+        if (paced.status !== 'playing' || paced.giant.y > 90)
+          throw new Error('巨人仍在哥布林清理阶段过快冲入主角区域');
+        api.debug.setPlayerPosition(560, 330);
+        api.debug.advance(.2);
+        const retreat = api.state();
+        const demonVisible = retreat.demon.x + 77.5 >= retreat.camera.x &&
+          retreat.demon.x - 77.5 <= retreat.camera.x + 280 &&
+          retreat.demon.y + 77.5 >= retreat.camera.y &&
+          retreat.demon.y - 77.5 <= retreat.camera.y + 462;
+        if (!demonVisible) throw new Error('主角向下撤退时没有看到魔人逼近');
+        api.debug.setPlayerPosition(1200, 1000);
+        api.debug.advance(.9);
+        const demonArrivedEarly = api.state();
+        if (!demonArrivedEarly.demon.approachDone || demonArrivedEarly.giant.approachDone ||
+            Math.abs(demonArrivedEarly.demon.x - demonArrivedEarly.demon.stopPoint.x) > .1 ||
+            Math.abs(demonArrivedEarly.demon.y - demonArrivedEarly.demon.stopPoint.y) > .1)
+          throw new Error('魔人没有在约3.5秒内提前到达原接触位置并等待巨人');
+        const waitingDemon = {...demonArrivedEarly.demon};
+        api.debug.advance(.5);
+        const demonWaiting = api.state();
+        if (Math.hypot(demonWaiting.demon.x - waitingDemon.x,
+              demonWaiting.demon.y - waitingDemon.y) > .1 ||
+            Math.hypot(demonWaiting.giant.x - demonArrivedEarly.giant.x,
+              demonWaiting.giant.y - demonArrivedEarly.giant.y) < 1)
+          throw new Error('魔人提前到位后没有等待仍在移动的巨人');
+        api.debug.advance(8);
+        const stopped = api.state();
+        if (stopped.giant.target.x !== 540 || stopped.giant.target.y !== 280 ||
+            stopped.demon.target.x !== 540 || stopped.demon.target.y !== 280)
+          throw new Error('巨人和魔人没有朝共同坐标(540,280)移动');
+        const ringGap = Math.hypot(stopped.giant.x - stopped.demon.x,
+          stopped.giant.y - stopped.demon.y);
+        if (!stopped.giant.arrived || !stopped.demon.arrived || Math.abs(ringGap - 144) > .1)
+          throw new Error(`巨人或魔人没有在光轮接触时共同停止：${JSON.stringify({
+            status: stopped.status, ringGap, giant: stopped.giant, demon: stopped.demon,
+          })}`);
+        api.debug.setPlayerPosition(540, 450);
+        document.body.dataset.threatRoutes = 'pass';
+      } catch (error) {
+        document.body.dataset.threatRoutes = 'failed';
+        document.body.dataset.threatRoutesError = error.message;
+      }
+    })();
+  </script>
+</body>
+</html>

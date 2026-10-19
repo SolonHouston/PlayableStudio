@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <title>一秒八刀 · 场景一 S-02</title>
+  <link rel="stylesheet" href="game.css">
+</head>
+<body>
+  <main id="shell">
+    <canvas id="game" aria-label="拖动屏幕移动悟空，拾取刀刃并解救牢笼角色"></canvas>
+    <div class="hud">
+      <div class="topline"><span class="badge">一秒八刀</span><span>场景一</span></div>
+      <div id="objective" class="objective"></div>
+      <div class="counts"><span id="blade-count"></span><span id="phase-hint"></span></div>
+    </div>
+    <div id="toast" class="toast" aria-live="polite"></div>
+    <div id="floating-stick" class="floating-stick" aria-hidden="true"><div id="floating-knob" class="floating-knob"></div></div>
+    <div id="result" class="result" hidden>
+      <div class="result-card">
+        <h1 id="result-title"></h1>
+        <p id="result-detail"></p>
+        <button id="retry" type="button">重试</button>
+      </div>
+    </div>
+  </main>
+  <script src="bgm.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

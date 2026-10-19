@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><link rel="stylesheet" href="../src/game.css"></head>
+<body>
+  <main id="shell">
+    <canvas id="game" width="280" height="462"></canvas>
+    <div class="hud"><div class="topline"><span class="badge">测试</span><span>场景三</span></div>
+      <div id="objective" class="objective"></div>
+      <div class="counts"><span id="blade-count"></span><span id="phase-hint"></span></div></div>
+    <div id="toast" class="toast"></div>
+    <div id="floating-stick" class="floating-stick"><div id="floating-knob" class="floating-knob"></div></div>
+    <div id="result" class="result" hidden><div class="result-card"><h1 id="result-title"></h1>
+      <p id="result-detail"></p><button id="retry">重试</button></div></div>
+  </main>
+  <script src="../src/scene3-play.js"></script>
+  <script>
+    (async () => {
+      const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+      try {
+        for (let index = 0; index < 80; index++) {
+          if (window.__SCENE3_PLAY__ && document.getElementById('game').dataset.renderStatus === 'ready') break;
+          await wait(50);
+        }
+        const api = window.__SCENE3_PLAY__;
+        const canvas = document.getElementById('game');
+        if (canvas.width !== 280 || canvas.height !== 462 ||
+            Math.abs(api.spec.playerBladeRing.outerDiameter - 108) > .001 ||
+            api.spec.transformation.renderSize[0] !== 86)
+          throw new Error('视野、主角光轮或变身模型尺寸未按确认值生效');
+        canvas.setPointerCapture = () => {};
+        const canvasRect = canvas.getBoundingClientRect();
+        canvas.dispatchEvent(new PointerEvent('pointerdown', {pointerId: 77, bubbles: true,
+          clientX: canvasRect.left + 80, clientY: canvasRect.top + 160}));
+        const stick = document.getElementById('floating-stick');
+        if (Math.abs(parseFloat(stick.style.left) - 80) > .5 ||
+            Math.abs(parseFloat(stick.style.top) - 160) > .5)
+          throw new Error('浮动摇杆没有与鼠标按下位置对齐');
+        canvas.dispatchEvent(new PointerEvent('pointerup', {pointerId: 77, bubbles: true}));
+        api.debug.setPlayerPosition(850, 300);
+        api.debug.spawnSea();
+        api.debug.advance(1.45);
+        if (Math.abs(api.state().sea.x - 820) > 1)
+          throw new Error('海神降速后没有及时到达既定堵门点');
+        api.debug.attackSea();
+        let intercept = api.state();
+        if (!intercept.sea.alive || intercept.venom.active || intercept.magnet.active ||
+            Math.abs(intercept.sea.venomSpawnAt - 2 - intercept.clock) > .05)
+          throw new Error('海神受击后没有进入2秒独立逃跑窗口');
+        api.debug.advance(1.8);
+        intercept = api.state();
+        if (intercept.venom.active || !intercept.sea.alive)
+          throw new Error('毒液在2秒追逐窗口结束前过早出现');
+        api.debug.advance(.25);
+        intercept = api.state();
+        if (!intercept.sea.alive || !intercept.venom.active ||
+            intercept.venom.mode !== 'interceptSea' || intercept.magnet.active)
+          throw new Error('2秒后毒液没有从左侧进入截杀状态');
+        api.debug.advance(.6);
+        intercept = api.state();
+        if (intercept.sea.alive || intercept.venom.mode !== 'chase' ||
+            !intercept.magnet.active || intercept.boneEffects < 1)
+          throw new Error('毒液没有击杀海神并转向主角');
+        api.debug.reset();
+        const initialX = api.state().player.x;
+        const goblinsBeforeChase = api.state().goblins;
+        dispatchEvent(new KeyboardEvent('keydown', {code: 'ArrowRight'}));
+        await wait(140);
+        dispatchEvent(new KeyboardEvent('keyup', {code: 'ArrowRight'}));
+        if (api.state().player.x <= initialX + 8) throw new Error('键盘移动未生效');
+        const goblinsAfterChase = api.state().goblins;
+        if (!goblinsAfterChase.some((enemy, index) =>
+          Math.hypot(enemy.x - goblinsBeforeChase[index].x,
+            enemy.y - goblinsBeforeChase[index].y) > 1))
+          throw new Error('主角移动后哥布林没有像胖虎一样持续追踪');
+        api.debug.setPlayerPosition(500, 500);
+        api.debug.collectStartWhite();
+        await wait(80);
+        let snapshot = api.state();
+        if (snapshot.whiteCollected !== 6 ||
+            snapshot.player.blades.filter(tier => tier === 'white').length !== 12)
+          throw new Error('6个白刃气泡没有按正常规则把主角从6白刃增加到12白刃');
+        if (snapshot.jiangbao.active)
+          throw new Error('远离最右白刃触发区时，拾完6白刃仍错误激活酱爆');
+        api.debug.setPlayerPosition(api.spec.jiangbao.triggerPoint.x,
+          api.spec.jiangbao.triggerPoint.y);
+        api.debug.advance(.02);
+        snapshot = api.state();
+        if (!snapshot.jiangbao.active || api.spec.jiangbao.fixedSpawn.x !== 1085 ||
+            api.spec.jiangbao.fixedSpawn.y !== 92 || api.spec.jiangbao.spawnRelativeToCamera)
+          throw new Error('主角到达最右白刃附近后，酱爆没有从固定位置激活');
+        api.debug.collectStartGreen();
+        await wait(80);
+        snapshot = api.state();
+        if (snapshot.greenCollected !== 4 ||
+            snapshot.player.blades.some(tier => tier === 'white'))
+          throw new Error('4绿刃或清除白刃状态错误');
+        if (snapshot.jiangbao.x <= 760.7793351783685)
+          throw new Error('酱爆没有从4绿刃右上方向主角接近');
+        api.debug.collectCorridorGreen(5);
+        await wait(80);
+        snapshot = api.state();
+        if (snapshot.middleGreenCollected !== 5 || snapshot.sea.active)
+          throw new Error('前5枚通道资源期间海神出现过早');
+        api.debug.collectCorridorGreen(1);
+        await wait(80);
+        snapshot = api.state();
+        if (snapshot.middleGreenCollected !== 6 || !snapshot.sea.active ||
+            api.spec.poseidon.spawnOnCorridorResourceCount !== 6)
+          throw new Error('拾取第6枚通道资源时海神没有从左侧出发');
+        api.debug.collectCorridorGreen(2);
+        await wait(80);
+        snapshot = api.state();
+        if (snapshot.greenCollected !== 12) throw new Error('4+8绿刃计数错误');
+        api.debug.defeatJiangbao();
+        await wait(80);
+        snapshot = api.state();
+        if (!snapshot.greensConverted || snapshot.player.blades.some(tier => tier === 'green'))
+          throw new Error('绿刃转金状态错误');
+        if (snapshot.boneEffects < 1) throw new Error('敌人死亡没有播放破碎骨头特效');
+        api.debug.reset();
+        const seaExitZone = api.spec.poseidon.exitTriggerZone;
+        api.debug.setPlayerPosition((seaExitZone.minX + seaExitZone.maxX) / 2,
+          seaExitZone.minY + 1);
+        api.debug.advance(.02);
+        snapshot = api.state();
+        if (!snapshot.sea.active || snapshot.middleGreenCollected !== 0)
+          throw new Error('漏拾通道资源但进入出口前末段时海神没有生成');
+        api.debug.reset();
+        api.debug.setPlayerPosition(850, 300);
+        api.debug.spawnSea();
+        snapshot = api.state();
+        if (snapshot.sea.entryState !== 'entering' || snapshot.sea.x >= snapshot.camera.x)
+          throw new Error('海神没有从镜头左侧进入并向右堵门');
+        if (api.spec.poseidon.entryOffsetX !== 50)
+          throw new Error('海神出生点没有向右移动50世界单位');
+        if (api.spec.poseidon.blockSpeed !== 127 || api.spec.poseidon.fleeSpeed !== 153 ||
+            !api.spec.poseidon.fasterThanPlayerOnFlee ||
+            api.spec.poseidon.venomSpawnDelay !== 2 ||
+            api.spec.venom.chaseSpeed !== 103 ||
+            api.spec.magnet.drawSize !== 30)
+          throw new Error('海神堵门/逃跑速度、毒液延迟或吸铁石尺寸没有生效');
+        api.debug.advance(1.45);
+        api.debug.attackSea();
+        const seaHitX = api.state().sea.x;
+        api.debug.advance(1.8);
+        snapshot = api.state();
+        if (snapshot.sea.x >= seaHitX || snapshot.venom.active || !snapshot.sea.alive)
+          throw new Error('海神没有以略快于主角的速度独立左逃，或毒液出现过早');
+        api.debug.advance(.25);
+        snapshot = api.state();
+        if (!snapshot.venom.active || snapshot.venom.mode !== 'interceptSea' ||
+            !snapshot.sea.alive)
+          throw new Error('2秒追逐后毒液没有开始截杀海神');
+        api.debug.advance(1.2);
+        snapshot = api.state();
+        if (snapshot.sea.alive || snapshot.venom.killable || snapshot.venom.mode !== 'chase')
+          throw new Error('毒液没有完成截杀并进入不可击败的追击状态');
+        if (api.spec.venom.entryOffsetX !== -50)
+          throw new Error('毒液出生点没有向左移动50世界单位');
+        api.debug.setPlayerPosition(800, 1000);
+        if (!api.debug.collectOneRedManually()) throw new Error('红刃气泡无法直接拾取');
+        snapshot = api.state();
+        if (snapshot.magnet.manual !== 1 || snapshot.player.blades.filter(tier => tier === 'red').length !== 1)
+          throw new Error('直接拾取红刃没有加入主角刀圈');
+        api.debug.takeMagnet();
+        api.debug.advance(1.4);
+        snapshot = api.state();
+        if (snapshot.player.form !== 'super' || snapshot.player.blades.length !== 12 ||
+            snapshot.player.blades.some(tier => tier !== 'red'))
+          throw new Error('吸铁石吸附与快速变身状态错误');
+        if (!snapshot.redTransformationCompleted)
+          throw new Error('首次红刃变身没有写入一次性完成状态');
+        if (snapshot.magnet.manual !== 1 || snapshot.magnet.pulled !== 11)
+          throw new Error('吸铁石没有只吸取手动拾取后剩余的11个红刃');
+        if (snapshot.venom.mode !== 'flee' || snapshot.venom.killable)
+          throw new Error('主角变身后毒液没有进入带短暂保护的逃跑状态');
+        const venomBeforeFlee = snapshot.venom;
+        api.debug.setPlayerPosition(620, 650);
+        api.debug.advance(.4);
+        snapshot = api.state();
+        if (snapshot.venom.x >= venomBeforeFlee.x || snapshot.venom.y >= venomBeforeFlee.y ||
+            snapshot.venom.currentFleeSpeed >= venomBeforeFlee.currentFleeSpeed)
+          throw new Error('毒液没有向左上减速逃跑');
+        api.debug.advance(.8);
+        snapshot = api.state();
+        if (!snapshot.venom.killable) throw new Error('毒液逃跑后没有进入可击杀状态');
+        if (api.debug.finalBossGuardProbe(580, 690, {x: -.7, y: -.7}) !==
+            'left-script-boundary' ||
+            api.debug.finalBossGuardProbe(700, 760, {x: .7, y: -.7}) !== 'right-up-intent')
+          throw new Error('左上边界或右上逃逸意图没有触发双Boss护栏');
+        api.debug.setPlayerPosition(580, 690);
+        api.debug.advance(.05);
+        snapshot = api.state();
+        if (!snapshot.venom.alive || !snapshot.bosses.axe || !snapshot.bosses.momo ||
+            snapshot.bosses.guardReason !== 'left-script-boundary')
+          throw new Error('毒液仍存活时双Boss没有一起生成');
+        if (api.spec.finalBosses.alignSpeed !== 91 || api.spec.finalBosses.downSpeed !== 75)
+          throw new Error('最终双Boss合围或斜向下压速度没有各提高3点');
+        api.debug.defeatVenom();
+        api.debug.setPlayerPosition(700, 500);
+        api.debug.advance(5);
+        snapshot = api.state();
+        if (!snapshot.bosses.axe || !snapshot.bosses.momo ||
+            snapshot.bosses.phase !== 'bossesChase' ||
+            Math.abs(snapshot.bosses.gap - snapshot.bosses.ringContactDistance) > 1)
+          throw new Error(`最终双Boss状态错误：${JSON.stringify(snapshot.bosses)}`);
+        const alignedBosses = snapshot.bosses;
+        api.debug.exhaustPlayerRedBlades();
+        snapshot = api.state();
+        if (snapshot.player.form !== 'normal' || snapshot.player.blades.length !== 0 ||
+            !snapshot.redTransformationCompleted || snapshot.bosses.phase !== 'bossesChase')
+          throw new Error('红刃耗尽后没有稳定恢复普通形态或破坏了最终Boss阶段');
+        api.debug.advance(.5);
+        snapshot = api.state();
+        if (snapshot.player.form !== 'normal' || snapshot.player.blades.length !== 0 ||
+            snapshot.bosses.phase !== 'bossesChase')
+          throw new Error('红刃耗尽后推进帧时重复生成红刃或覆盖了最终Boss阶段');
+        if (snapshot.bosses.axePosition.x >= alignedBosses.axePosition.x ||
+            snapshot.bosses.momoPosition.x >= alignedBosses.momoPosition.x ||
+            snapshot.bosses.axePosition.y <= alignedBosses.axePosition.y ||
+            snapshot.bosses.momoPosition.y <= alignedBosses.momoPosition.y ||
+            Math.abs(snapshot.bosses.gap - alignedBosses.gap) > .01)
+          throw new Error('最终双Boss没有在光轮接触后保持间距斜向下压');
+        api.debug.reset();
+        snapshot = api.state();
+        if (snapshot.redTransformationCompleted || !api.debug.transformPlayer() ||
+            api.debug.transformPlayer())
+          throw new Error('重试没有清除一次性变身状态，或同一局能够重复变身');
+        const combat = api.debug.combatProbe();
+        if (!combat.continuousPairs) throw new Error('单帧多组碰刀未连续结算');
+        if (!combat.delayPreserved) throw new Error('碰刀后的0.5秒缺口未保留');
+        if (!combat.smoothReflow) throw new Error('脱战刀圈没有平滑重排');
+        if (!combat.bodyHitThroughGap) throw new Error('敌人仍有刀时无法穿缺口命中本体');
+        api.debug.setPlayerPosition(620, 1100);
+        window.requestAnimationFrame = () => 0;
+        await wait(50);
+        document.body.dataset.stateMachine = 'pass';
+      } catch (error) {
+        document.body.dataset.stateMachine = 'failed';
+        document.body.dataset.stateMachineError = error.message;
+      }
+    })();
+  </script>
+</body>
+</html>

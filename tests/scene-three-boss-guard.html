@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><link rel="stylesheet" href="../src/game.css"></head>
+<body>
+  <main id="shell">
+    <canvas id="game" width="280" height="462"></canvas>
+    <div class="hud"><div class="topline"><span class="badge">护栏测试</span><span>场景三</span></div>
+      <div id="objective" class="objective"></div>
+      <div class="counts"><span id="blade-count"></span><span id="phase-hint"></span></div></div>
+    <div id="toast" class="toast"></div>
+    <div id="floating-stick" class="floating-stick"><div id="floating-knob" class="floating-knob"></div></div>
+    <div id="result" class="result" hidden><div class="result-card"><h1 id="result-title"></h1>
+      <p id="result-detail"></p><button id="retry">重试</button></div></div>
+  </main>
+  <script src="../src/scene3-play.js"></script>
+  <script>
+    (async () => {
+      const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+      try {
+        for (let index = 0; index < 80; index++) {
+          if (window.__SCENE3_PLAY__ &&
+              document.getElementById('game').dataset.renderStatus === 'ready') break;
+          await wait(50);
+        }
+        const api = window.__SCENE3_PLAY__;
+        api.debug.spawnVenom();
+        api.debug.setPlayerPosition(700, 760);
+        api.debug.transformPlayer();
+        const before = api.state().venom;
+        dispatchEvent(new KeyboardEvent('keydown', {code: 'ArrowRight'}));
+        dispatchEvent(new KeyboardEvent('keydown', {code: 'ArrowUp'}));
+        api.debug.advance(.08);
+        dispatchEvent(new KeyboardEvent('keyup', {code: 'ArrowRight'}));
+        dispatchEvent(new KeyboardEvent('keyup', {code: 'ArrowUp'}));
+        let snapshot = api.state();
+        if (!snapshot.bosses.axe || !snapshot.bosses.momo ||
+            snapshot.bosses.guardReason !== 'right-up-intent')
+          throw new Error('实际右上输入没有同时生成斧头帮和momo');
+        const bossExtent = 112 * 1.05;
+        if (snapshot.bosses.axePosition.x + bossExtent >= snapshot.camera.x ||
+            snapshot.bosses.momoPosition.x - bossExtent <= snapshot.camera.x + 280 ||
+            snapshot.bosses.axeEntryState !== 'entering' ||
+            snapshot.bosses.momoEntryState !== 'entering')
+          throw new Error('双Boss没有从当前镜头左右两侧视野外入场');
+        if (api.spec.finalBosses.contactCenterX !== 620 ||
+            api.spec.playerBladeRing.outerDiameter !== 108 ||
+            api.spec.transformation.effectSize.join('x') !== '60x80')
+          throw new Error('接触点、主角光轮或局部背景尺寸不正确');
+        api.debug.setPlayerPosition(700, 500);
+        api.debug.advance(.5);
+        snapshot = api.state();
+        if (snapshot.venom.x >= before.x || snapshot.venom.y >= before.y ||
+            snapshot.venom.currentFleeSpeed >= before.currentFleeSpeed)
+          throw new Error('毒液没有保持向左上减速逃跑');
+        document.body.dataset.bossGuard = 'pass';
+      } catch (error) {
+        document.body.dataset.bossGuard = 'failed';
+        document.body.dataset.bossGuardError = error.message;
+      }
+    })();
+  </script>
+</body>
+</html>
